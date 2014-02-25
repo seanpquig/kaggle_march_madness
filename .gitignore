@@ -1,3 +1,6 @@
+# Submissions
+submissions/*.csv
+
 *.py[cod]
 
 # C extensions
