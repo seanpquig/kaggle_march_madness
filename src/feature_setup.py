@@ -9,6 +9,10 @@ import numpy as np
 from sklearn import linear_model, feature_selection, metrics
 
 
+def get_training_set(df):
+    """  """
+
+
 def get_reg_season_data(df):
     """ Adds regular season data to input DataFrame. """
 
@@ -30,56 +34,105 @@ def get_reg_season_data(df):
     return df
 
 
+def get_seeds(df):
+    """ Adds tourney seed data to input DataFrame. """
+
+    seeds_df = pd.read_csv('../data/tourney_seeds.csv')
+    seeds_df['team'] = seeds_df['team'].apply(str)
+    tourney_seeds = {}
+    for i in xrange(len(seeds_df)):
+        season = seeds_df['season'][i]
+        region = seeds_df['seed'][i][0]
+        seed = int(seeds_df['seed'][i][1:3])
+        team = seeds_df['team'][i]
+        tourney_seeds[(season, team)] = (region, seed)
+    
+    regions_t1, regions_t2 = [], []
+    seeds_t1, seeds_t2 = [], []
+    for i in xrange(len(df)):
+        # lookup seeds for team1
+        try:
+            regions_t1.append(tourney_seeds[(df.season[i], df.team1[i])][0])
+            seeds_t1.append(tourney_seeds[(df.season[i], df.team1[i])][1])
+        except KeyError:
+            regions_t1.append(None)
+            seeds_t1.append(None)
+
+        # lookup seeds for team2
+        try:
+            regions_t2.append(tourney_seeds[(df.season[i], df.team2[i])][0])
+            seeds_t2.append(tourney_seeds[(df.season[i], df.team2[i])][1])
+        except KeyError:
+            regions_t2.append(None)
+            seeds_t2.append(None)
+
+    df['team1_region'], df['team2_region'] = regions_t1, regions_t2
+    df['team1_seed'], df['team2_seed'] = seeds_t1, seeds_t2
+    return df
+
+
 def get_tourney_results(df):
     """ Pulls tourney results into input df as output variable. """
 
     tourney_results_df = pd.read_csv('../data/tourney_results.csv')
     tourney_results = {}
-    for row in xrange(len(tourney_results_df)):
-        season = tourney_results_df['season'][row]
-        wteam = tourney_results_df['wteam'][row]
-        lteam = tourney_results_df['lteam'][row]
+    for i in xrange(len(tourney_results_df)):
+        season = tourney_results_df['season'][i]
+        wteam = tourney_results_df['wteam'][i]
+        lteam = tourney_results_df['lteam'][i]
+        daynum = tourney_results_df['daynum'][i]
         if wteam < lteam:
-            tourney_results[(season, str(wteam), str(lteam))] = 1
+            tourney_results[(season, str(wteam), str(lteam))] = (1, daynum)
         elif wteam > lteam:
-            tourney_results[(season, str(lteam), str(wteam))] = 0
+            tourney_results[(season, str(lteam), str(wteam))] = (0, daynum)
         else:
             print 'There\'s a problem:  same team listed twice in a matchup.'
 
     results = []
-    for row in xrange(len(df)):
+    daynum = []
+    for i in xrange(len(df)):
         try:
-            results.append(tourney_results[(df.season[row], df.team1[row], df.team2[row])])
+            results.append(tourney_results[(df.season[i], df.team1[i], df.team2[i])][0])
+            daynum.append(tourney_results[(df.season[i], df.team1[i], df.team2[i])][1])
         except KeyError:
             results.append(None)
+            daynum.append(None)
 
     df['results'] = results
+    df['daynum'] = daynum
     return df
+
 
 
 def main():
     # set up core DataFrame object for data transformation and analysis
     df = pd.read_csv('../data/sample_submission.csv')
     del df['pred']
-
+    
     # break out lookup keys
     df['season'] = [i[0] for i in df.id]
     df['team1'] = [i[2:5] for i in df.id]
     df['team2'] = [i[6:] for i in df.id]
-
+    
     # pull in regular season data
     df = get_reg_season_data(df)
+    
+    # get tourney seed data
+    df = get_seeds(df)
 
     # pull in tourney results as output variable
     df = get_tourney_results(df)
 
+    # calculated features
+    df['seed_diff'] = df['team1_seed'] - df['team2_seed']
 
-    # Retrict to real games
-    df_test = df[ df['results'].notnull() ]
+    # Restrict to real games and exculde play-in games
+    df_test = df[ df['results'].notnull() & (df['daynum'] > 135) ]
 
 
     ### SETUP FEATURES AND OUTPUT VARIABLE
-    features = ['team1_wins', 'team2_wins']
+    # features = ['team1_wins', 'team2_wins', 'team1_losses', 'team2_losses']
+    features = ['team1_seed', 'team2_seed']
     x_vals = df_test[features]
     y_vals = df_test.results.values.astype(int)
 
@@ -102,10 +155,11 @@ def main():
 
 
     ### OUTPUT PREDICTIONS
-    # x_vals = df[features]
-    # y_pred_probs = model.predict_proba(x_vals)
-    # df['pred'] = y_pred_probs.T[1]
-    # df[['id', 'pred']].to_csv('../submissions/output.csv', index=False)
+    x_vals = df[features]
+    y_pred_probs = model.predict_proba(x_vals)
+    df['pred'] = y_pred_probs.T[1]
+    print '\nwriting csv output...'
+    df[['id', 'pred']].to_csv('../submissions/output.csv', index=False)
 
 
 if __name__ == '__main__':
