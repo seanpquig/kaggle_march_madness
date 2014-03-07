@@ -13,21 +13,52 @@ from sklearn.ensemble.weight_boosting import AdaBoostClassifier
 
 def get_reg_season_data(df):
     """ Adds regular season data to input DataFrame. """
-
+    
     reg_df = pd.read_csv('../data/regular_season_results.csv')
     reg_df['wteam'] = reg_df['wteam'].apply(str)
     reg_df['lteam'] = reg_df['lteam'].apply(str)
 
+    # Get team wins and losses by season
     win_df = pd.DataFrame(reg_df.groupby(['season', 'wteam']).size(), columns = ['wins'])
     loss_df = pd.DataFrame(reg_df.groupby(['season', 'lteam']).size(), columns = ['losses'])
+
+    # Get team points for and points against by season
+    win_pts_df = reg_df.groupby(['season', 'wteam']).sum()[['wscore', 'lscore']]
+    win_pts_df.columns = ['PF_in_wins', 'PA_in_wins']
+    loss_pts_df = reg_df.groupby(['season', 'lteam']).sum()[['lscore', 'wscore']]
+    loss_pts_df.columns = ['PF_in_losses', 'PA_in_losses']
+
+    # Pull data together
     wl_df = pd.merge(win_df, loss_df, left_index=True, right_index=True, how='outer')
+    wl_df = pd.merge(wl_df, win_pts_df, left_index=True, right_index=True, how='outer')
+    wl_df = pd.merge(wl_df, loss_pts_df, left_index=True, right_index=True, how='outer')
     wl_df = wl_df.fillna(0)
 
-    # pull win/loss data into core DataFrame
+    # Pull win/loss data into core DataFrame
     df['team1_wins'] = [wl_df.loc[(df.season[i], df.team1[i])][0] for i in xrange(len(df))]
     df['team1_losses'] = [wl_df.loc[(df.season[i], df.team1[i])][1] for i in xrange(len(df))]
+    df['team1_PF_in_wins'] = [wl_df.loc[(df.season[i], df.team1[i])][2] for i in xrange(len(df))] 
+    df['team1_PA_in_wins'] = [wl_df.loc[(df.season[i], df.team1[i])][3] for i in xrange(len(df))]
+    df['team1_PF_in_losses'] = [wl_df.loc[(df.season[i], df.team1[i])][4] for i in xrange(len(df))]
+    df['team1_PA_in_losses'] = [wl_df.loc[(df.season[i], df.team1[i])][5] for i in xrange(len(df))]
+
     df['team2_wins'] = [wl_df.loc[(df.season[i], df.team2[i])][0] for i in xrange(len(df))]
     df['team2_losses'] = [wl_df.loc[(df.season[i], df.team2[i])][1] for i in xrange(len(df))]
+    df['team2_PF_in_wins'] = [wl_df.loc[(df.season[i], df.team2[i])][2] for i in xrange(len(df))] 
+    df['team2_PA_in_wins'] = [wl_df.loc[(df.season[i], df.team2[i])][3] for i in xrange(len(df))]
+    df['team2_PF_in_losses'] = [wl_df.loc[(df.season[i], df.team2[i])][4] for i in xrange(len(df))]
+    df['team2_PA_in_losses'] = [wl_df.loc[(df.season[i], df.team2[i])][5] for i in xrange(len(df))]
+
+    # Calculated metrics
+    df['team1_GP'] = df['team1_wins'] + df['team1_losses']
+    df['team1_PF'] = df['team1_PF_in_wins'] + df['team1_PF_in_losses']
+    df['team1_PA'] = df['team1_PA_in_wins'] + df['team1_PA_in_losses']
+    df['team1_pt_diff'] = (df['team1_PF'] - df['team1_PA']) / df['team1_GP']
+
+    df['team2_GP'] = df['team2_wins'] + df['team2_losses']
+    df['team2_PF'] = df['team2_PF_in_wins'] + df['team2_PF_in_losses']
+    df['team2_PA'] = df['team2_PA_in_wins'] + df['team2_PA_in_losses']
+    df['team2_pt_diff'] = (df['team2_PF'] - df['team2_PA']) / df['team2_GP']
 
     return df
 
@@ -168,7 +199,7 @@ def main():
 
     ### SETUP FEATURES AND DEPENDENT VARIABLE DATA
     features = ['team1_wins', 'team2_wins', 'team1_losses', 'team2_losses', 
-                'team1_seed', 'team2_seed']
+                'team1_seed', 'team2_seed', 'team1_pt_diff', 'team2_pt_diff']
     train_features = df_train[features]
     train_labels = df_train.result.values.astype(int)
 
@@ -190,7 +221,6 @@ def main():
 
     print '\n', 'features: ', features
     print 'p-vals: ', feature_selection.univariate_selection.f_classif(X_train, y_train)[1]
-    code.interact(local=locals())
     print 'coefs: ', model.coef_
 
     print_model_stats(model, X_train, y_train, 'training set:')
