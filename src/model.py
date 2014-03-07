@@ -193,22 +193,15 @@ def main():
     df_train = get_tourney_results(df_train)
 
     # Restrict to real matchups and exculde play-in games
-    df_score = df[ (df['result'].notnull()) & (df['daynum'] > 135) ]
     df_train = df_train[ df_train['daynum'] > 135 ]
+    df_test = df[ (df['result'].notnull()) & (df['daynum'] > 135) ]
 
 
     ### SETUP FEATURES AND DEPENDENT VARIABLE DATA
     features = ['team1_wins', 'team2_wins', 'team1_losses', 'team2_losses', 
                 'team1_seed', 'team2_seed', 'team1_pt_diff', 'team2_pt_diff']
-    train_features = df_train[features]
-    train_labels = df_train.result.values.astype(int)
-
-    np.random.seed(1)
-    X_train, X_test, y_train, y_test = \
-        cross_validation.train_test_split(train_features, train_labels, test_size=.35)
-
-    X_score = df_score[features]
-    y_score = df_score.result.values.astype(int)
+    X_train, y_train = df_train[features], df_train.result.values.astype(int)
+    X_test, y_test = df_test[features], df_test.result.values.astype(int)
 
     
     ### CREATE MODEL AND RUN STATISTICS
@@ -223,10 +216,9 @@ def main():
     print 'p-vals: ', feature_selection.univariate_selection.f_classif(X_train, y_train)[1]
     print 'coefs: ', model.coef_
 
+    print_cross_val_stats(model, X_train, y_train)
     print_model_stats(model, X_train, y_train, 'training set:')
-    print_model_stats(model, X_test, y_test, 'testing set:')
-    print_model_stats(model, X_score, y_score, 'scored set:')
-    print_cross_val_stats(model, train_features, train_labels)
+    print_model_stats(model, X_test, y_test, 'scored set:')
 
 
     ### OUTPUT PREDICTIONS
