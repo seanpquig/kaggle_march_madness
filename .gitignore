@@ -1,5 +1,6 @@
 # Submissions
 submissions/*.csv
+data/transformed_features/*.csv
 
 *.py[cod]
 
